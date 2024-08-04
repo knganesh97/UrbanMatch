@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.encoders import jsonable_encoder
+from sqlalchemy import intersect, select
 from sqlalchemy.orm import Session
 from database import SessionLocal, engine, Base, maxInterests
 import models, schemas
@@ -85,23 +86,21 @@ def db_interests_format(interests: list[str], user_id: int):
     
     return db_interests
 
-# @app.get("/matches/{user_id}", response_model=list[schemas.UserResponse])
-# def find_matches(user_id: int, skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
-
-    db_user = db.query(models.User).filter(models.User.id == user_id).first()
-    db_user_interests = db.query(models.Interest).filter(models.Interest.user_id == user_id).all()
-    # db_same_city_users = db.query(models.User).filter(models.User.city == db_user.city, models.User.gender != db_user.gender, models.User.id != db_user.id).all()
-
-    # same_city_user_ids = []
-    # for db_same_city_user in db_same_city_users:
-    #     same_city_user_ids.append(db_same_city_user.id)
-
-    db_user_hobbies = []
-    for db_user_interest in db_user_interests:
-        db_user_hobbies.append(db_user_interest.hobby)
+@app.get("/matches/{user_id}", response_model=list[schemas.UserResponse])
+def find_matches(user_id: int, skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    users_in_same_city = db.query(models.User).filter(models.User.city == user.city, models.User.gender != user.gender).all()
+    user_interests = db.query(models.Interest).filter(models.Interest.user_id == user_id).all()
+    isUserInterest = {}
+    for user_interest in user_interests:
+        isUserInterest[user_interest.hobby] = True
+    matches = []
     
-    db_matches = db.query(models.User).filter(
-        models.User.id != user_id,
-        models.User.city == db_user.city,
-        models.User.gender != db_user.gender
-    )
+    for user_in_same_city in users_in_same_city:
+        interests = db.query(models.Interest).filter(models.Interest.user_id == user_in_same_city.id).all()
+        for interest in interests:
+            if interest.hobby in isUserInterest:
+                matches.append(user_in_same_city)
+                break
+    
+    return matches
